@@ -45,3 +45,9 @@ images/
 
 # Temp/trash
 trash/
+
+# Local folders to ignore
+ship/
+deepscanin/
+deepScanIn/
+data/
