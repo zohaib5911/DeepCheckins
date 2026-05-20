@@ -1,0 +1,38 @@
+{
+  "recording_dir": "/home/nauman/deepScanIn/data/videos/recordings",
+  "max_storage_gb": 10.0,
+  "cleanup_trigger_gb": 8.0,
+  "clip_duration_sec": 10.0,
+  "pre_buffer_sec": 1.0,
+  "codec": "mp4v",
+  "camera_index": 0,
+  "target_fps": 20,
+  "frame_width": 0,
+  "frame_height": 0,
+  "rotation": 90,
+  "camera_retries": 5,
+  "camera_retry_delay": 2.0,
+  "warmup_frames": 20,
+  "movement_threshold": 25,
+  "min_contour_area": 800,
+  "max_changed_ratio": 0.85,
+  "min_changed_ratio": 0.0008,
+  "confirm_frames": 2,
+  "cooldown_sec": 0.0,
+  "log_level": "INFO",
+  "log_file": "",
+  "hardware_id": "",
+  "camera_type": "motion",
+  "cameras": [
+    {
+      "camera_index": 0,
+      "camera_type": "unknown_1",
+      "hardware_id": "0198:14fe"
+    },
+    {
+      "camera_index": 1,
+      "camera_type": "unknown_2",
+      "hardware_id": "0198:14fe"
+    }
+  ]
+}

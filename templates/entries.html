@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Activity · DeepCheckIns{% endblock %}
+
+{% block content %}
+<section class="panel">
+    <div class="panel-head">
+        <div>
+            <h1>Activity <span class="live"><span class="live-dot"></span>Live</span></h1>
+        </div>
+        <div class="legend">
+            <span class="dot known"></span> Known
+            <span class="dot unknown"></span> Unknown
+        </div>
+    </div>
+
+    <div class="card">
+        <table class="data feed">
+            <colgroup>
+                <col class="c-num" />
+                <col class="c-pic" />
+                <col class="c-id" />
+                <col class="c-cam" />
+                <col class="c-time" />
+            </colgroup>
+            <thead>
+                <tr>
+                    <th class="num">#</th>
+                    <th>Pic</th>
+                    <th>Identity</th>
+                    <th>Cam Type</th>
+                    <th>Time</th>
+                </tr>
+            </thead>
+            <tbody id="feed-body" data-refresh-url="{{ url_for('api_entries') }}">
+                {% for r in rows %}
+                <tr>
+                    <td class="num muted">{{ loop.index }}</td>
+                    <td class="pic-cell">
+                        {% if r.pic_url %}
+                            <img class="thumb zoomable"
+                                 src="{{ r.pic_url }}"
+                                 data-full="{{ r.pic_url }}"
+                                 alt="capture" />
+                        {% else %}
+                            <div class="thumb placeholder">Pic not available</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="tag {{ r.kind }}">{{ r.name }}</span>
+                    </td>
+                    <td>{{ r.cam }}</td>
+                    <td class="mono">{{ r.dt_str }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="empty">No activity yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<script>
+(function () {
+    const body = document.getElementById('feed-body');
+    if (!body) return;
+    const url = body.dataset.refreshUrl;
+    const modal = document.getElementById('imgModal');
+
+    function rowHtml(r, i) {
+        const pic = r.pic_url
+            ? `<img class="thumb zoomable" src="${r.pic_url}" data-full="${r.pic_url}" alt="capture" />`
+            : `<div class="thumb placeholder">Pic not available</div>`;
+        const safeName = String(r.name).replace(/</g, '&lt;');
+        const safeCam = String(r.cam).replace(/</g, '&lt;');
+        const safeDt = String(r.dt_str).replace(/</g, '&lt;');
+        const safeKind = (r.kind === 'known' || r.kind === 'unknown') ? r.kind : 'unknown';
+        return `<tr>
+            <td class="num muted">${i}</td>
+            <td class="pic-cell">${pic}</td>
+            <td><span class="tag ${safeKind}">${safeName}</span></td>
+            <td>${safeCam}</td>
+            <td class="mono">${safeDt}</td>
+        </tr>`;
+    }
+
+    async function refresh() {
+        if (modal && modal.classList.contains('open')) return;
+        if (document.hidden) return;
+        try {
+            const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+            if (!res.ok) return;
+            const data = await res.json();
+            const rows = data.rows || [];
+            if (!rows.length) {
+                body.innerHTML = '<tr><td colspan="5" class="empty">No activity yet.</td></tr>';
+                return;
+            }
+            body.innerHTML = rows.map((r, idx) => rowHtml(r, idx + 1)).join('');
+        } catch (e) { /* swallow */ }
+    }
+
+    setInterval(refresh, 5000);
+})();
+</script>
+{% endblock %}

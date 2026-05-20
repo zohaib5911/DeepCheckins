@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Database Browser</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      color-scheme: dark;
+      --bg-app: #0d1117;
+      --bg-canvas: #0d1117;
+      --bg-surface: #161b22;
+      --bg-surface-hover: #1c2128;
+      --bg-overlay: #21262d;
+      --bg-input: #0d1117;
+      
+      --border-default: #30363d;
+      --border-muted: #21262d;
+      --border-subtle: #1c2128;
+      
+      --text-primary: #f0f6fc;
+      --text-secondary: #8d96a0;
+      --text-tertiary: #636c76;
+      --text-disabled: #484f58;
+      
+      --accent-fg: #2f81f7;
+      --accent-emphasis: #1f6feb;
+      --accent-muted: rgba(56, 139, 253, 0.15);
+      --accent-subtle: rgba(56, 139, 253, 0.1);
+      
+      --success-fg: #3fb950;
+      --success-emphasis: #238636;
+      --success-muted: rgba(46, 160, 67, 0.15);
+      --success-subtle: rgba(46, 160, 67, 0.1);
+      
+      --danger-fg: #f85149;
+      --danger-emphasis: #da3633;
+      --danger-muted: rgba(248, 81, 73, 0.15);
+      --danger-subtle: rgba(248, 81, 73, 0.1);
+      
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+      --shadow-lg: 0 12px 28px rgba(0,0,0,0.5);
+      --shadow-inset: inset 0 1px 0 rgba(255,255,255,0.03);
+      
+      --radius: 6px;
+      --radius-lg: 12px;
+      
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+      
+      --transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-canvas);
+      color: var(--text-primary);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      padding: 24px 20px;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 24px;
+      align-items: start;
+    }
+
+    .card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-lg);
+      padding: 0;
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border-default);
+      background: var(--bg-overlay);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.01em;
+    }
+
+    .card-body {
+      padding: 20px;
+    }
+
+    /* Upload Section */
+    .upload-section {
+      margin-bottom: 16px;
+    }
+
+    .upload-section .card-header {
+      padding: 10px 14px;
+    }
+
+    .upload-section .card-body {
+      padding: 10px 14px;
+    }
+
+    .upload-section .card-title {
+      font-size: 13px;
+    }
+
+    .file-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .file-input {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 14px;
+      font-family: inherit;
+      background: var(--bg-input);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius);
+      color: var(--text-secondary);
+      transition: var(--transition);
+    }
+
+    .file-input:focus {
+      border-color: var(--accent-fg);
+      box-shadow: 0 0 0 3px var(--accent-subtle);
+      color: var(--text-primary);
+    }
+
+    .file-button {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .file-button input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .upload-actions {
+      margin-top: 12px;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    /* Buttons */
+    button, .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 8px 16px;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: inherit;
+      line-height: 20px;
+      white-space: nowrap;
+      border-radius: var(--radius);
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: var(--transition);
+      text-decoration: none;
+      color: var(--text-primary);
+      background: transparent;
+      outline: none;
+    }
+
+    .btn-primary {
+      background: var(--accent-emphasis);
+      border-color: var(--border-default);
+      color: #fff;
+      box-shadow: var(--shadow-inset);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--accent-fg);
+      border-color: var(--border-muted);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .btn-success {
+      background: var(--success-emphasis);
+      border-color: var(--border-default);
+      color: #fff;
+      box-shadow: var(--shadow-inset);
+    }
+
+    .btn-success:hover:not(:disabled) {
+      background: var(--success-fg);
+      border-color: var(--border-muted);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .btn-danger {
+      background: var(--danger-emphasis);
+      border-color: var(--border-default);
+      color: #fff;
+      box-shadow: var(--shadow-inset);
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: var(--danger-fg);
+      border-color: var(--border-muted);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .btn-secondary {
+      background: var(--bg-overlay);
+      border-color: var(--border-default);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: var(--bg-surface-hover);
+      border-color: var(--text-tertiary);
+    }
+
+    button:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-block {
+      width: 100%;
+    }
+
+    /* Alerts */
+    .alert {
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 20px;
+      border: 1px solid;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .alert-success {
+      background: var(--success-muted);
+      border-color: var(--success-emphasis);
+      color: var(--success-fg);
+    }
+
+    .alert-error {
+      background: var(--danger-muted);
+      border-color: var(--danger-emphasis);
+      color: var(--danger-fg);
+    }
+
+    .alert::before {
+      content: '';
+      width: 4px;
+      height: 16px;
+      border-radius: 2px;
+      background: currentColor;
+      flex-shrink: 0;
+    }
+
+    /* User Gallery */
+    .user-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px;
+      border-bottom: 1px solid var(--border-default);
+    }
+
+    .user-info h1 {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+      letter-spacing: -0.02em;
+    }
+
+    .user-meta {
+      font-size: 13px;
+      color: var(--text-tertiary);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .pagination {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      background: var(--bg-input);
+      padding: 4px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border-default);
+    }
+
+    .page-count {
+      font-size: 13px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-secondary);
+      padding: 0 12px;
+      min-width: 60px;
+      text-align: center;
+    }
+
+    .image-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 14px;
+      padding: 20px;
+    }
+
+    .image-tile {
+      position: relative;
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--bg-input);
+      border: 1px solid var(--border-default);
+      transition: var(--transition);
+      aspect-ratio: 1;
+      transform: scale(0.95);
+      transform-origin: center;
+    }
+
+    .image-tile:hover {
+      border-color: var(--border-muted);
+      box-shadow: var(--shadow-md);
+      transform: translateY(-2px);
+    }
+
+    .image-tile img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .image-label {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      background: rgba(13, 17, 23, 0.9);
+      backdrop-filter: blur(8px);
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border: 1px solid var(--border-default);
+    }
+
+    .image-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      padding: 24px;
+    }
+
+    .image-modal.active {
+      display: flex;
+    }
+
+    .image-modal-content {
+      width: 50vw;
+      height: 50vh;
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      border: 1px solid var(--border-default);
+      box-shadow: var(--shadow-lg);
+      background: var(--bg-surface);
+    }
+
+    .image-modal-content img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: var(--bg-input);
+    }
+
+    .navigation {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      padding: 20px 24px;
+      border-top: 1px solid var(--border-default);
+    }
+
+    .keyboard-hint {
+      padding: 12px 20px;
+      border-top: 1px solid var(--border-default);
+      background: var(--bg-input);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--text-tertiary);
+    }
+
+    .kbd {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 24px;
+      height: 24px;
+      padding: 0 8px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      background: var(--bg-overlay);
+      border: 1px solid var(--border-default);
+      border-radius: 4px;
+      box-shadow: 0 1px 0 var(--border-default), inset 0 1px 0 rgba(255,255,255,0.03);
+    }
+
+    /* Sidebar */
+    .sidebar {
+      position: sticky;
+      top: 32px;
+    }
+
+    .action-group {
+      padding: 20px;
+    }
+
+    .action-group:not(:last-child) {
+      border-bottom: 1px solid var(--border-default);
+    }
+
+    .action-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      margin-bottom: 12px;
+    }
+
+    .input-group {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    input[type="number"],
+    input[type="text"] {
+      flex: 1;
+      padding: 8px 12px;
+      font-size: 14px;
+      font-family: inherit;
+      background: var(--bg-input);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius);
+      color: var(--text-primary);
+      outline: none;
+      transition: var(--transition);
+    }
+
+    input:focus {
+      border-color: var(--accent-fg);
+      box-shadow: 0 0 0 3px var(--accent-subtle);
+    }
+
+    input::placeholder {
+      color: var(--text-tertiary);
+    }
+
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 80px 32px;
+      color: var(--text-tertiary);
+    }
+
+    .empty-icon {
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 16px;
+      opacity: 0.3;
+    }
+
+    .empty-text {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    .empty-hint {
+      font-size: 13px;
+      color: var(--text-tertiary);
+    }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      
+      .sidebar {
+        position: static;
+      }
+
+      .image-grid {
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 12px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      body {
+        padding: 16px 12px;
+      }
+
+      .card-body {
+        padding: 16px;
+      }
+
+      .user-header {
+        padding: 16px;
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start;
+      }
+
+      .image-grid {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        padding: 16px;
+      }
+    }
+
+    /* Animations */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .card {
+      animation: fadeIn 0.3s ease-out;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="layout">
+      <div class="main">
+        <!-- Upload Section -->
+        <div class="card upload-section">
+          <div class="card-header">
+            <h2 class="card-title">Add New User</h2>
+          </div>
+          <div class="card-body">
+            {% if status %}
+              <div class="alert alert-success">{{ status }}</div>
+            {% endif %}
+            {% if error %}
+              <div class="alert alert-error">{{ error }}</div>
+            {% endif %}
+
+            <form method="post" action="{{ url_for('add_user_action') }}" enctype="multipart/form-data">
+              <div class="file-row" style="margin-bottom: 10px;">
+                <input id="folder-path" class="file-input" type="text" placeholder="Choose a folder..." readonly />
+                <button type="button" class="btn btn-secondary file-button">
+                  Browse
+                  <input id="folder-input" type="file" name="folder" webkitdirectory directory multiple required />
+                </button>
+              </div>
+              <div class="upload-actions">
+                <button type="submit" class="btn btn-success">
+                  <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2Z"/>
+                  </svg>
+                  Add User
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- User Gallery -->
+        {% if empty %}
+          <div class="card">
+            <div class="card-body">
+              <div class="empty-state">
+                <svg class="empty-icon" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m6 4.125l2.25 2.25m0 0l2.25 2.25M12 13.875l2.25-2.25M12 13.875l-2.25 2.25M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+                </svg>
+                <div class="empty-text">No users in database</div>
+                <div class="empty-hint">Upload a folder to get started</div>
+              </div>
+            </div>
+          </div>
+        {% else %}
+          <div class="card">
+            <div class="user-header">
+              <div class="user-info">
+                <h1>User ID {{ user_id }}</h1>
+                <div class="user-meta">{{ image_indices|length }} embeddings</div>
+              </div>
+              <div class="pagination">
+                <a href="{{ url_for('user_view', index=(index - 1 + total) % total) }}">
+                  <button class="btn btn-secondary" title="Previous (←)">
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                      <path fill-rule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"/>
+                    </svg>
+                  </button>
+                </a>
+                <span class="page-count">{{ index + 1 }} / {{ total }}</span>
+                <a href="{{ url_for('user_view', index=(index + 1) % total) }}">
+                  <button class="btn btn-secondary" title="Next (→)">
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                      <path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
+                    </svg>
+                  </button>
+                </a>
+              </div>
+            </div>
+
+            <div class="image-grid">
+              {% for image_index in image_indices %}
+                <div class="image-tile">
+                  <span class="image-label">{{ image_index + 1 }}</span>
+                  <img
+                    src="{{ url_for('user_image', user_id=user_id, image_index=image_index) }}?t={{ ts }}"
+                    data-full="{{ url_for('user_image', user_id=user_id, image_index=image_index) }}?t={{ ts }}"
+                    alt="Embedding {{ image_index + 1 }}"
+                    loading="lazy"
+                    class="js-zoomable"
+                  />
+                </div>
+              {% endfor %}
+            </div>
+
+            <div class="keyboard-hint">
+              <span>Navigate:</span>
+              <kbd class="kbd">←</kbd>
+              <kbd class="kbd">→</kbd>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+
+      {% if not empty %}
+        <aside class="sidebar">
+          <div class="card">
+            <div class="action-group">
+              <form method="post" action="{{ url_for('drop_user', index=index) }}">
+                <button type="submit" class="btn btn-danger btn-block">
+                  <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5Zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5Zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6Z"/>
+                    <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1ZM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118ZM2.5 3h11V2h-11v1Z"/>
+                  </svg>
+                  Delete User
+                </button>
+              </form>
+            </div>
+
+            <div class="action-group">
+              <label class="action-label">Remove Embedding</label>
+              <form method="post" action="{{ url_for('remove_embedding_action', index=index) }}">
+                <div class="input-group">
+                  <input type="number" name="embedding_no" min="1" max="{{ max_embedding_index }}" placeholder="Embedding #" required />
+                  <button type="submit" class="btn btn-secondary">
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                      <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                      <path d="M4 8a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7A.5.5 0 0 1 4 8z"/>
+                    </svg>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div class="action-group">
+              <label class="action-label">Replace Embedding</label>
+              <form method="post" enctype="multipart/form-data" action="{{ url_for('replace_embedding_action', index=index) }}">
+                <input type="number" name="embedding_no" min="1" max="{{ max_embedding_index }}" placeholder="Embedding #" required style="margin-bottom: 12px;" />
+                <div class="file-row" style="margin-bottom: 12px;">
+                  <input id="replace-file-name" class="file-input" type="text" placeholder="Choose an image..." readonly />
+                  <button type="button" class="btn btn-secondary file-button">
+                    Browse
+                    <input id="replace-file-input" type="file" name="image" accept="image/*" required />
+                  </button>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">
+                  <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708l-3-3zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207l6.5-6.5zm-7.468 7.468A.5.5 0 0 1 6 13.5V13h-.5a.5.5 0 0 1-.5-.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.5-.5V10h-.5a.499.499 0 0 1-.175-.032l-.179.178a.5.5 0 0 0-.11.168l-2 5a.5.5 0 0 0 .65.65l5-2a.5.5 0 0 0 .168-.11l.178-.178z"/>
+                  </svg>
+                  Replace
+                </button>
+              </form>
+            </div>
+          </div>
+        </aside>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if not empty %}
+    <div id="image-modal" class="image-modal" aria-hidden="true">
+      <div class="image-modal-content">
+        <img id="image-modal-img" alt="Preview" />
+      </div>
+    </div>
+    <script>
+      const modal = document.getElementById('image-modal');
+      const modalImg = document.getElementById('image-modal-img');
+      const zoomables = document.querySelectorAll('.js-zoomable');
+
+      function closeImageModal() {
+        if (!modal || !modalImg) return;
+        modal.classList.remove('active');
+        modal.setAttribute('aria-hidden', 'true');
+        modalImg.src = '';
+      }
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowLeft') {
+          window.location.href = "{{ url_for('user_view', index=(index - 1 + total) % total) }}";
+        }
+        if (e.key === 'ArrowRight') {
+          window.location.href = "{{ url_for('user_view', index=(index + 1) % total) }}";
+        }
+        if (e.key === 'Escape') {
+          closeImageModal();
+        }
+      });
+
+      // Prevent form resubmission on refresh
+      if (window.history.replaceState) {
+        window.history.replaceState(null, null, window.location.href);
+      }
+
+      function openImageModal(src) {
+        if (!modal || !modalImg) return;
+        modalImg.src = src;
+        modal.classList.add('active');
+        modal.setAttribute('aria-hidden', 'false');
+      }
+
+      zoomables.forEach((img) => {
+        img.addEventListener('click', () => {
+          const src = img.getAttribute('data-full') || img.src;
+          openImageModal(src);
+        });
+      });
+
+      if (modal) {
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            closeImageModal();
+          }
+        });
+      }
+    </script>
+  {% endif %}
+  <script>
+    const folderInput = document.getElementById('folder-input');
+    const folderPath = document.getElementById('folder-path');
+    if (folderInput && folderPath) {
+      folderInput.addEventListener('change', () => {
+        const files = folderInput.files;
+        if (!files || files.length === 0) {
+          folderPath.value = '';
+          return;
+        }
+        const first = files[0].webkitRelativePath || files[0].name;
+        const folderName = first.split('/')[0];
+        folderPath.value = folderName || 'Selected folder';
+      });
+    }
+
+    const replaceInput = document.getElementById('replace-file-input');
+    const replaceName = document.getElementById('replace-file-name');
+    if (replaceInput && replaceName) {
+      replaceInput.addEventListener('change', () => {
+        const file = replaceInput.files && replaceInput.files[0];
+        replaceName.value = file ? file.name : '';
+      });
+    }
+  </script>
+</body>
+</html>

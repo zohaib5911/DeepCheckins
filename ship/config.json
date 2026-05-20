@@ -1,0 +1,57 @@
+{
+    "system_starting_date": "2026-05-01",
+
+    "model_path": "/home/nauman/deepScanIn/face_landmarker.task",
+
+    "registration_dir":         "/home/nauman/deepScanIn/data/registered_faces",
+    "deleted_registration_dir": "/home/nauman/deepScanIn/data/registered_faces/deleted",
+    "videos_dir":               "/home/nauman/deepScanIn/data/videos/recordings",
+    "processed_videos_dir":     "/home/nauman/deepScanIn/data/videos/processed",
+    "unknown_dir":              "/home/nauman/deepScanIn/data/unknown",
+    "unknown_debug_dir":        "/home/nauman/deepScanIn/data/debug/unknown",
+    "noface_dir":               "/home/nauman/deepScanIn/data/debug/noface",
+    "debug_fail_dir":           "/home/nauman/deepScanIn/data/debug/failures",
+    "known_detect_dir":         "/home/nauman/deepScanIn/data/detections/known",
+    "known_pics_dir":           "/home/nauman/deepScanIn/logs",
+
+    "database_path":     "/home/nauman/deepScanIn/data/database.bin",
+    "unknown_bin":       "/home/nauman/deepScanIn/data/unknown/unknown.bin",
+    "known_log_file":    "/home/nauman/deepScanIn/checkins.txt",
+    "unknown_log_file":  "/home/nauman/deepScanIn/data/unknown/unknown_log.txt",
+    "debug_log_file":    "/home/nauman/deepScanIn/data/logs/debug_checks.txt",
+    "motion_state_file": "/home/nauman/deepScanIn/data/motion_state.flag",
+
+    "app_host":    "0.0.0.0",
+    "app_port":    5000,
+    "editor_host": "0.0.0.0",
+    "editor_port": 5050,
+
+    "cooling_period": 60,
+    "roi": {
+        "x": 0.3,
+        "y": 0.2,
+        "width": 0.25,
+        "height": 0.3
+    },
+    "apply_roi": false,
+    "frame_skip": 1,
+    "threshold": 0.5,
+    "quality_threshold": 0.3,
+    "EMB_PER_USER": 10,
+    "EMB_DIM": 512,
+    "EMB_DTYPE": "float32",
+    "MAX_USERS": 100,
+    "IMG_H": 128,
+    "IMG_W": 128,
+    "IMG_C": 3,
+    "IMAGE_BYTES": 49152,
+    "VALID_FMT": "B",
+    "ID_FMT": "64s",
+    "COUNT_FMT": "B",
+    "EMB_COUNT": 5120,
+    "EMB_BYTES": 20480,
+    "USER_RECORD_SIZE": 512066,
+    "DB_SIZE": 51206600,
+    "min_face_size": 80,
+    "print_debug_info": true
+}

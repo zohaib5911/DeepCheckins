@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.DS_Store
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Editor/OS
+.vscode/
+.idea/
+
+# Logs and runtime outputs
+logs/
+checkins.txt
+data/logs/
+data/motion_state.flag
+
+# Videos and recordings
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.mp4.part
+
+data/videos/recordings/
+data/videos/processed/
+
+# Detections and debug artifacts
+data/detections/
+data/debug/
+
+# Unknown/known runtime data
+/data/unknown/
+/data/registered_faces/
+
+# Images export
+images/
+
+# Temp/trash
+trash/
