@@ -10,7 +10,6 @@ from database import INFO
 import numpy as np
 import mediapipe as mp
 from insightface.app import FaceAnalysis
-from unknown import  unknown_handler 
 from database import Database, getNumberOfEmbeddings
 
 from checks import (
@@ -19,6 +18,7 @@ from checks import (
     is_face_brightness_ok,
     compute_quality
 )
+from face_quality import validate_face, score_face
 from log import write_log
 import json
 from collections import defaultdict
@@ -38,8 +38,11 @@ debuglogpath = paths.DEBUG_LOG_FILE
 noface_dir = paths.NOFACE_DIR
 debug_fail_dir = paths.DEBUG_FAIL_DIR
 known_detect_dir = paths.KNOWN_DETECT_DIR
+unknown_dir = paths.UNKNOWN_DIR
 EMB_PER_USER = config["EMB_PER_USER"]
 EMB_DIM = config["EMB_DIM"]
+# Only score every Nth frame for best-face finding (configurable, default 3).
+BEST_FACE_FRAME_SKIP = max(1, int(config.get("best_face_frame_skip", 3)))
 
 _logged_users_by_video = defaultdict(set)
 
@@ -75,8 +78,8 @@ options = FaceLandmarkerOptions(
     base_options=BaseOptions(model_asset_path=MODEL_PATH),
     running_mode=VisionRunningMode.IMAGE,
     num_faces=5,
-    min_face_detection_confidence=0.3,
-    min_face_presence_confidence=0.3,
+    min_face_detection_confidence=config.get("min_face_detection_confidence", 0.7),
+    min_face_presence_confidence=config.get("min_face_presence_confidence", 0.7),
 )
 
 landmarker = None
@@ -176,11 +179,14 @@ def align_face_for_arcface(face_crop, face_landmarks, x1_p, y1_p, w_img, h_img):
 
 visulize = False
 
-def recognize(name, frame, knownFaiss , db : Database, frame_no: int = 0, timestamp: str = "", video_name: str = ""):
+def recognize(name, frame, knownFaiss , db : Database, frame_no: int = 0, timestamp: str = "", video_name: str = "", best_tracker=None):
     global knownThreshold
+    # Returns True if at least one real (validation-passing) face was detected
+    # in this frame, so callers can tell whether a video had any faces at all.
+    face_detected = False
     if landmarker is None:
-        return frame
-    
+        return face_detected
+
     try:
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         frame_rgb = np.ascontiguousarray(frame_rgb)
@@ -197,8 +203,8 @@ def recognize(name, frame, knownFaiss , db : Database, frame_no: int = 0, timest
             print(f"[INFO] {name}: No faces detected")
         write_log(debuglogpath, timestamp, frame_no, "No faces detected", video_name)
         _save_image(noface_dir, video_name, frame_no, frame)
-        return n_frame
-    
+        return face_detected
+
     h_img, w_img = frame.shape[:2]
 
     for face_landmarks in result.face_landmarks:
@@ -220,11 +226,26 @@ def recognize(name, frame, knownFaiss , db : Database, frame_no: int = 0, timest
         face_crop = frame[y1_p:y2_p, x1_p:x2_p]
         
         quality = compute_quality(face_landmarks)
+
+        # ── Face validation layer (runs BEFORE ArcFace) ─────────────────────
+        # Rejects MediaPipe false detections: back-of-head, hallucinated
+        # half-faces, collapsed meshes, upside-down geometry.
+        face_ok, reject_reason = validate_face(face_landmarks)
+        if not face_ok:
+            if print_debug_info:
+                print(f"[DEBUG] {name}: Face validation - FAIL ({reject_reason})")
+            write_log(debuglogpath, timestamp, frame_no, f"Face validation failed: {reject_reason}", video_name)
+            _save_debug_failure("validation", video_name, frame_no, face_crop)
+            continue
+
+        # A real face passed validation — this video has at least one face.
+        face_detected = True
+
         pos_valid = validFacePosition_mediapipe(face_landmarks, frame.shape)
-        
+
         if print_debug_info:
             print(f"[DEBUG] {name}: Face position check - {'PASS' if pos_valid else 'FAIL'} (quality: {quality:.3f})")
-        
+
         if not pos_valid:
             write_log(debuglogpath, timestamp, frame_no, "Face position check failed", video_name)
             _save_debug_failure("position", video_name, frame_no, face_crop)
@@ -316,6 +337,13 @@ def recognize(name, frame, knownFaiss , db : Database, frame_no: int = 0, timest
             
             if should_log:
                 write_log(knownlogpath, log_ts, frame_no, f"{uid} -- {best_score:.2f}", video_name)
+
+            # ── Best-face scoring: track top frames per identified user ─────
+            if best_tracker is not None and (frame_no % BEST_FACE_FRAME_SKIP == 0):
+                face_bbox = (x1, y1, x2 - x1, y2 - y1)  # tight box, pixel coords
+                q = score_face(face_landmarks, frame, face_bbox, frame_no)
+                best_tracker.add(uid, q, frame)
+
             user_folder = os.path.join(known_detect_dir, uid)
             _save_image(user_folder, video_name, frame_no, face_crop)
             user_log = os.path.join(user_folder, "log.txt")
@@ -324,8 +352,23 @@ def recognize(name, frame, knownFaiss , db : Database, frame_no: int = 0, timest
             color = (0, 255, 0)   
             label = f"{uid} ({best_score:.3f})"
         else:
-            uid = unknown_handler(face_crop, face_embedding, threshold=knownThreshold, timestamp=log_ts, frame_no=frame_no, video_name=video_name)
-            best_score = 0.0 if uid is None else best_score
+
+            # uid = unknown_handler(face_crop, face_embedding, threshold=knownThreshold, timestamp=log_ts, frame_no=frame_no, video_name=video_name)
+            # best_score = 0.0 if uid is None else best_score
+            # color = (0, 0, 255)   # RED (unknown)
+            # label = f"{uid}"
+            # Unknown person: just save the face crop to the unknown folder.
+            # No FAISS matching, no embedding storage, no logging — nothing else.
+            os.makedirs(unknown_dir, exist_ok=True)
+            stem = Path(video_name).stem if video_name else "unknown"
+            stem = stem.replace(" ", "_")
+            unk_path = os.path.join(unknown_dir, f"{stem}_F{frame_no}_{x1_p}.jpg")
+            try:
+                cv2.imwrite(unk_path, face_crop)
+            except Exception:
+                pass
+            uid = "unknown"
+            best_score = 0.0
             color = (0, 0, 255)   # RED (unknown)
             label = f"{uid}"
 
@@ -359,9 +402,9 @@ def recognize(name, frame, knownFaiss , db : Database, frame_no: int = 0, timest
         cv2.resizeWindow(name, 960, 540)
         cv2.imshow(name, display_frame)
         cv2.waitKey(1)
-             
-            
-                
+
+    return face_detected
+
 
 def getEmbedding(name, frame):
     if landmarker is None:
@@ -404,6 +447,14 @@ def getEmbedding(name, frame):
 
     if face_crop.size == 0:
         return None
+
+    # Face validation layer — reject false / hallucinated MediaPipe detections
+    # before spending an ArcFace embedding on them.
+    face_ok, reject_reason = validate_face(face_landmarks)
+    if not face_ok:
+        print(f"[FAIL] {name}: Face validation failed ({reject_reason})")
+        return None
+
     quality = compute_quality(face_landmarks)
     quality_threshold = config.get("quality_threshold", 0.5)
     if True:

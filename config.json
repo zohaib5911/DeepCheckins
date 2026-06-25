@@ -5,7 +5,7 @@
 
     "registration_dir":         "/home/zohaib/deeepScanIN/data/registered_faces",
     "deleted_registration_dir": "/home/zohaib/deeepScanIN/data/registered_faces/deleted",
-    "videos_dir":               "/home/zohaib/deeepScanIN/data/videos/recordings",
+    "videos_dir":               "/home/zohaib/deeepScanIN/ToProcess",
     "processed_videos_dir":     "/home/zohaib/deeepScanIN/data/videos/processed",
     "unknown_dir":              "/home/zohaib/deeepScanIN/data/unknown",
     "unknown_debug_dir":        "/home/zohaib/deeepScanIN/data/debug/unknown",
@@ -53,5 +53,12 @@
     "USER_RECORD_SIZE": 512066,
     "DB_SIZE": 51206600,
     "min_face_size": 80,
-    "print_debug_info": true
+    "print_debug_info": true,
+
+    "min_face_detection_confidence": 0.7,
+    "min_face_presence_confidence": 0.7,
+    "best_face_frame_skip": 1,
+
+    "apply_rotation": false,
+    "rotation_degrees": 90
 }

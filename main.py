@@ -1,7 +1,8 @@
 from database import Database, user_count , User
 from HNSW import FaissIndex
 import cv2
-from arcFace import recognize , getEmbedding 
+from arcFace import recognize , getEmbedding
+from face_quality import BestFaceTracker, save_best_face_results
 knownFaiss = None
 import os 
 import json
@@ -31,6 +32,92 @@ IMAGE_BYTES = config.get("IMAGE_BYTES", IMG_H * IMG_W * IMG_C)
 base_folder = paths.REGISTRATION_DIR
 knownlogpath = paths.KNOWN_LOG_FILE
 
+# ─── Frame rotation ──────────────────────────────────────────────────────────
+# Rotate each frame before processing. Degrees are ANTICLOCKWISE
+# (counter-clockwise). Cardinal angles (90/180/270) use cv2.rotate so the full
+# image is preserved and dimensions swap correctly; other angles fall back to
+# a canvas-expanding affine rotation so nothing gets cropped.
+APPLY_ROTATION   = bool(config.get("apply_rotation", False))
+ROTATION_DEGREES = int(config.get("rotation_degrees", 0))
+
+
+def rotate_frame_for_processing(frame):
+    """Rotate `frame` anticlockwise by ROTATION_DEGREES if rotation is enabled."""
+    if not APPLY_ROTATION or frame is None:
+        return frame
+    deg = ROTATION_DEGREES % 360
+    if deg == 0:
+        return frame
+    if deg == 90:
+        return cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    if deg == 180:
+        return cv2.rotate(frame, cv2.ROTATE_180)
+    if deg == 270:
+        return cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+    # Arbitrary angle: expand the canvas so corners aren't clipped.
+    h, w = frame.shape[:2]
+    center = (w / 2.0, h / 2.0)
+    M = cv2.getRotationMatrix2D(center, deg, 1.0)  # positive = anticlockwise
+    cos, sin = abs(M[0, 0]), abs(M[0, 1])
+    new_w = int(h * sin + w * cos)
+    new_h = int(h * cos + w * sin)
+    M[0, 2] += (new_w / 2.0) - center[0]
+    M[1, 2] += (new_h / 2.0) - center[1]
+    return cv2.warpAffine(frame, M, (new_w, new_h))
+
+
+# Videos with no detected faces land here (under the configured noface dir).
+NOFACE_VIDEOS_DIR = os.path.join(paths.NOFACE_DIR, "videos")
+
+
+def _write_rotated_video(src_path: str, dst_path: str) -> bool:
+    """Re-encode `src_path` into `dst_path` with each frame rotated per config.
+    Returns True on success."""
+    cap = cv2.VideoCapture(src_path)
+    if not cap.isOpened():
+        return False
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    if fps <= 0:
+        fps = 30.0
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = None
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            rot = rotate_frame_for_processing(frame)
+            if writer is None:
+                h, w = rot.shape[:2]
+                writer = cv2.VideoWriter(dst_path, fourcc, fps, (w, h))
+            writer.write(rot)
+    finally:
+        cap.release()
+        if writer is not None:
+            writer.release()
+    return writer is not None
+
+
+def _save_noface_video(video_path: str) -> None:
+    """Move a no-face video into the nofaces folder. If rotation is enabled the
+    saved copy is rotated; otherwise the original file is moved as-is."""
+    os.makedirs(NOFACE_VIDEOS_DIR, exist_ok=True)
+    dst = os.path.join(NOFACE_VIDEOS_DIR, os.path.basename(video_path))
+    try:
+        if APPLY_ROTATION and (ROTATION_DEGREES % 360) != 0:
+            if _write_rotated_video(video_path, dst):
+                if os.path.exists(video_path):
+                    os.remove(video_path)   # drop original so it isn't re-processed
+                print(f"[NO-FACE] Saved rotated video → {dst}")
+            else:
+                print(f"[NO-FACE] Could not re-encode {video_path}; moving original")
+                shutil.move(video_path, dst)
+        else:
+            shutil.move(video_path, dst)
+            print(f"[NO-FACE] Moved video → {dst}")
+    except Exception as e:
+        print(f"[ERROR] Failed to save no-face video {video_path}: {e}")
+
 # ─── Coordination with motion.py ─────────────────────────────────────────────
 # motion.py writes "RECORDING:<unix_ms>" or "IDLE:<unix_ms>" to MOTION_STATE_FILE.
 # A dedicated watcher thread polls the file at WATCHER_POLL_MS and flips a
@@ -53,6 +140,8 @@ IDLE_POLL_MS      = 100      # outer-loop poll cadence while idle
 RECORDING_POLL_MS = 20       # outer-loop poll cadence while paused
 
 _motion_event   = _threading.Event()  # set ⇔ motion.py is recording
+_idle_event     = _threading.Event()  # set ⇔ motion.py is idle (inverse of _motion_event)
+_idle_event.set()
 _watcher_stop   = _threading.Event()
 _watcher_thread: _threading.Thread | None = None
 _watcher_lock   = _threading.Lock()
@@ -95,13 +184,15 @@ def _current_state() -> str:
 
 
 def _watcher_loop() -> None:
-    """High-frequency poll → toggles _motion_event."""
+    """High-frequency poll → toggles _motion_event / _idle_event."""
     interval = max(WATCHER_POLL_MS, 1) / 1000.0
     while not _watcher_stop.wait(interval):
         if _current_state() == "RECORDING":
+            _idle_event.clear()
             _motion_event.set()
         else:
             _motion_event.clear()
+            _idle_event.set()
 
 
 def start_motion_watcher() -> None:
@@ -110,12 +201,14 @@ def start_motion_watcher() -> None:
     with _watcher_lock:
         if _watcher_thread and _watcher_thread.is_alive():
             return
-        # Seed the event from the current on-disk state so we don't race
+        # Seed the events from the current on-disk state so we don't race
         # an empty cycle before the watcher's first tick.
         if _current_state() == "RECORDING":
+            _idle_event.clear()
             _motion_event.set()
         else:
             _motion_event.clear()
+            _idle_event.set()
         _watcher_stop.clear()
         _watcher_thread = _threading.Thread(
             target=_watcher_loop, daemon=True, name="motion-state-watcher"
@@ -138,13 +231,17 @@ def is_recording() -> bool:
     return _motion_event.is_set()
 
 
-def wait_until_idle(poll_ms: int = RECORDING_POLL_MS) -> None:
-    """Block until motion.py reports IDLE again. Uses Event.wait for efficiency."""
-    delay = max(poll_ms, 5) / 1000.0
-    while _motion_event.is_set():
-        # Event.wait returns instantly if cleared; otherwise sleeps `delay`.
-        if not _motion_event.wait(delay):
-            return
+def wait_until_idle(timeout: float | None = None) -> bool:
+    """Block until motion.py reports IDLE again.
+
+    Uses ``_idle_event.wait()`` so the calling thread is fully parked by the
+    OS — zero CPU while waiting. Returns True if IDLE was reached, False on
+    timeout. (Previous implementation polled `_motion_event.is_set()` and
+    spun at 100% CPU because Event.wait returns immediately when the event
+    is already set — that bug burned a core on the Pi any time motion.py
+    was actively recording.)
+    """
+    return _idle_event.wait(timeout)
 
 db = None
 
@@ -379,6 +476,8 @@ def video_start(video_path):
     start_ts = base_ts or datetime.now()
     frame_id = 0
     interrupted = False
+    any_face_detected = False
+    best_tracker = BestFaceTracker(top_n=10)
     # is_recording() is cached (STATE_CACHE_TTL_MS), so calling it every
     # frame is essentially free — gives us ~50ms reaction time when motion
     # starts. Partial work is discarded; the video stays in place and gets
@@ -393,9 +492,10 @@ def video_start(video_path):
         if not ret:
             print("End of video or error reading frame.")
             break
+        frame = rotate_frame_for_processing(frame)
         frame_id += 1
         frame_ts = (start_ts + timedelta(seconds=(frame_id - 1) / fps))
-        recognize(
+        detected = recognize(
             name,
             frame,
             knownFaiss,
@@ -403,7 +503,14 @@ def video_start(video_path):
             frame_id,
             frame_ts.isoformat(timespec="milliseconds"),
             video_name,
+            best_tracker=best_tracker,
         )
+        any_face_detected = any_face_detected or bool(detected)
+
+        # Progress: every 100 frames report current frame + best score so far.
+        if frame_id % 100 == 0:
+            print(f"[PROGRESS] {video_name}: frame {frame_id} | "
+                  f"best score so far {best_tracker.best_score_overall():.4f}")
 
     cap.release()
 
@@ -412,6 +519,24 @@ def video_start(video_path):
         return
 
     print("Processing finished.")
+
+    # No face anywhere in the video → don't treat it as processed. Save the
+    # (rotated) video into the nofaces folder and stop here.
+    if not any_face_detected:
+        print(f"[NO-FACE] No faces detected in {video_name} — moving to nofaces folder")
+        _save_noface_video(video_path)
+        return
+
+    # Save best-face results for every identified person in this video.
+    for uid in best_tracker.users():
+        best_score, best_frame = best_tracker.best(uid)
+        save_best_face_results(
+            uid,
+            video_path,
+            best_score,
+            best_frame,
+            best_tracker.top_candidates(uid),
+        )
 
     # Move or delete processed video
     try:
